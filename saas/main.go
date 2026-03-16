@@ -137,6 +137,15 @@ func main() {
 		AppDir:    "./app",
 		StaticDir: "./static",
 		Dev:       dev,
+		Cache: &lungo.CacheOptions{
+			DefaultMode: "ssr", // most pages are user-specific
+			Rules: []lungo.CacheRule{
+				{Path: "/", Mode: "static"},
+				{Path: "/login", Mode: "static"},
+				{Path: "/pricing", Mode: "isr", TTL: 300},
+			},
+			RevalidateSecret: os.Getenv("REVALIDATE_SECRET"),
+		},
 	})
 
 	app.Use(lungo.CORS(lungo.CORSOptions{AllowOrigins: []string{"*"}}))
@@ -263,5 +272,9 @@ func main() {
 		return lungo.ActionResult{Redirect: "/tasks"}
 	})
 
-	log.Fatal(app.ListenAndServe(":3000"))
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "3000"
+	}
+	log.Fatal(app.ListenAndServe(":" + port))
 }
