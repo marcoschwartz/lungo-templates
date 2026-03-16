@@ -1,0 +1,7 @@
+{
+  "name": "lungo-omnikit-template",
+  "private": true,
+  "dependencies": {
+    "@tailwindcss/cli": "^4.2.1"
+  }
+}
