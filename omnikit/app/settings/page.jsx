@@ -1,25 +1,13 @@
-const { h, useState, useEffect } = window.Lungo;
+const { h } = window.Lungo;
 
 export const metadata = {
   title: "Settings — MyApp",
 };
 
-export default function SettingsPage() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+export const loader = { url: "/api/auth/me" };
 
-  useEffect(() => {
-    fetch("/api/auth/me")
-      .then(r => r.json())
-      .then(data => {
-        if (data && !data.error) setUser(data);
-        setLoading(false);
-      });
-  }, []);
-
-  if (loading) {
-    return <div class="text-stone-500 py-12 text-center">Loading...</div>;
-  }
+export default function SettingsPage({ data }) {
+  const user = data && data.email ? data : null;
 
   return (
     <div class="max-w-2xl">
@@ -43,11 +31,11 @@ export default function SettingsPage() {
               {user ? (user.display_name || user.username || "—") : "—"}
             </div>
           </div>
-          {user && user.plan ? (
+          {user && user.role ? (
             <div>
-              <label class="block text-sm text-stone-400 mb-1">Plan</label>
+              <label class="block text-sm text-stone-400 mb-1">Role</label>
               <div class="inline-flex px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 text-xs font-medium uppercase">
-                {user.plan}
+                {user.role}
               </div>
             </div>
           ) : null}
@@ -75,7 +63,7 @@ export default function SettingsPage() {
       <div class="rounded-xl border border-red-900/30 bg-red-900/10 p-6">
         <h2 class="text-lg font-semibold text-stone-200 mb-2">Danger Zone</h2>
         <p class="text-stone-500 text-sm mb-4">Sign out of your account on this device.</p>
-        <form method="POST" action="/__action/logout">
+        <form method="POST" action="/action/logout">
           <button type="submit" class="px-4 py-2 rounded-lg bg-red-500/20 text-red-400 text-sm font-medium hover:bg-red-500/30 transition-colors border border-red-500/20">
             Sign Out
           </button>

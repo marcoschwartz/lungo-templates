@@ -1,8 +1,10 @@
-const { h, useState, useEffect } = window.Lungo;
+const { h } = window.Lungo;
 
 export const metadata = {
   title: "Storage — MyApp",
 };
+
+export const loader = { url: "/api/storage/files" };
 
 function FileCard({ file }) {
   const ext = (file.name || "").split(".").pop().toLowerCase();
@@ -23,19 +25,8 @@ function FileCard({ file }) {
   );
 }
 
-export default function StoragePage() {
-  const [files, setFiles] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/storage/files")
-      .then(r => r.json())
-      .then(data => {
-        if (Array.isArray(data)) setFiles(data);
-        else if (data && data.data) setFiles(data.data);
-        setLoading(false);
-      });
-  }, []);
+export default function StoragePage({ data }) {
+  const files = Array.isArray(data) ? data : (data && data.data ? data.data : []);
 
   return (
     <div>
@@ -46,9 +37,7 @@ export default function StoragePage() {
         </div>
       </div>
 
-      {loading ? (
-        <div class="text-center py-12 text-stone-500">Loading files...</div>
-      ) : files.length > 0 ? (
+      {files.length > 0 ? (
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {files.map(f => <FileCard file={f} />)}
         </div>

@@ -1,5 +1,7 @@
 const { h, useState, useEffect, useRouter } = window.Lungo;
 
+export const loader = { url: "/api/projects" };
+
 function NavLink({ href, icon, children }) {
   const router = useRouter();
   const isActive = router.pathname === href || (href !== "/" && router.pathname.startsWith(href));
@@ -16,12 +18,67 @@ function NavLink({ href, icon, children }) {
   );
 }
 
-export default function Layout({ children }) {
+function ProjectSelector({ projects, currentId }) {
+  const [open, setOpen] = useState(false);
+  const [activeId, setActiveId] = useState(currentId);
+  const router = useRouter();
+  const currentProject = projects ? projects.find(p => String(p.id) === String(activeId)) : null;
+  const label = currentProject ? currentProject.name : "Select project";
+
+  function switchProject(pid) {
+    setActiveId(String(pid));
+    setOpen(false);
+    document.cookie = "omnikit_project=" + pid + ";path=/;max-age=31536000";
+    fetch("/action/switch-project", {
+      method: "POST",
+      headers: {"Content-Type": "application/x-www-form-urlencoded"},
+      body: "project_id=" + pid
+    }).then(() => {
+      router.refresh();
+    });
+  }
+
+  return (
+    <div class="p-3 border-b border-stone-800">
+      <label class="text-xs text-stone-500 mb-1.5 block">Project</label>
+      <div class="relative">
+        <button
+          type="button"
+          onclick={() => setOpen(!open)}
+          class="w-full flex items-center justify-between bg-stone-900 border border-stone-700 text-stone-200 text-sm rounded-lg px-3 py-2 hover:border-stone-600 transition-colors text-left"
+        >
+          <span class="truncate">{label}</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-stone-500 shrink-0 ml-2"><path d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        {open ? (
+          <div class="absolute left-0 right-0 mt-1 bg-stone-900 border border-stone-700 rounded-lg shadow-xl py-1 max-h-48 overflow-y-auto z-50 slim-scroll">
+            {projects ? projects.map(p => (
+              <button
+                type="button"
+                onclick={() => switchProject(p.id)}
+                class={String(p.id) === String(activeId)
+                  ? "w-full text-left px-3 py-1.5 text-sm text-amber-400 bg-amber-500/10"
+                  : "w-full text-left px-3 py-1.5 text-sm text-stone-300 hover:bg-stone-800 hover:text-stone-100 transition-colors"}
+              >
+                {p.name}
+              </button>
+            )) : null}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+export default function Layout({ children, data }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
   const isAuthPage = router.pathname === "/login";
 
   useEffect(() => { setMenuOpen(false); }, [router.pathname]);
+
+  const projects = data && data.projects ? data.projects : [];
+  const currentPid = data && data.current_project_id ? data.current_project_id : "";
 
   if (isAuthPage) {
     return (
@@ -50,15 +107,16 @@ export default function Layout({ children }) {
 
   return (
     <div class="min-h-screen bg-[#0f0a06] text-stone-100 flex">
-      <aside class="hidden md:flex w-56 flex-col border-r border-stone-800 bg-[#0a0704]">
+      <aside class="hidden md:flex w-56 flex-col border-r border-stone-800 bg-[#0a0704] overflow-visible">
         <div class="p-4 border-b border-stone-800">
           <a href="/dashboard" class="text-lg font-bold bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent no-underline">
             MyApp
           </a>
         </div>
+        <ProjectSelector projects={projects} currentId={currentPid} />
         {nav}
         <div class="mt-auto p-3 border-t border-stone-800">
-          <form method="POST" action="/__action/logout">
+          <form method="POST" action="/action/logout">
             <button type="submit" class="flex items-center gap-3 px-3 py-2 rounded-lg text-stone-500 hover:text-red-400 hover:bg-stone-800 transition-colors text-sm w-full">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9"/></svg>
               <span>Sign Out</span>
@@ -78,6 +136,7 @@ export default function Layout({ children }) {
         </header>
         {menuOpen ? (
           <div class="md:hidden border-b border-stone-800 bg-[#0a0704]">
+            <ProjectSelector projects={projects} currentId={currentPid} />
             {nav}
           </div>
         ) : null}

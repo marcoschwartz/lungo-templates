@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,10 @@ import (
 
 	"github.com/marcoschwartz/lungo/pkg/lungo"
 )
+
+func base64Decode(dst, src []byte) (int, error) {
+	return base64.RawURLEncoding.Decode(dst, src)
+}
 
 // ── OmniKit API Client ───────────────────────────────────────
 
@@ -64,6 +69,14 @@ func main() {
 		projectID = "1"
 	}
 
+	// Helper to get project ID from cookie or default
+	getProjectID := func(r *http.Request) string {
+		if c, err := r.Cookie("omnikit_project"); err == nil && c.Value != "" {
+			return c.Value
+		}
+		return projectID
+	}
+
 	dev := os.Getenv("LUNGO_DEV") == "1"
 
 	app := lungo.New(lungo.Options{
@@ -81,6 +94,104 @@ func main() {
 	})
 
 	app.Use(lungo.CORS(lungo.CORSOptions{AllowOrigins: []string{"*"}}))
+
+	app.Use(lungo.Redirects([]lungo.RedirectRule{
+		{From: "/", To: "/dashboard", Code: 302},
+	}))
+
+	// Token refresh — if access_token is expired but refresh_token exists, get a new one
+	app.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			accessCookie, accessErr := r.Cookie("access_token")
+			refreshCookie, refreshErr := r.Cookie("refresh_token")
+
+			needsRefresh := false
+			if accessErr != nil && refreshErr == nil && refreshCookie.Value != "" {
+				// No access token but have refresh token
+				needsRefresh = true
+			} else if accessErr == nil && accessCookie.Value != "" {
+				// Check if access token is expired by trying to decode JWT expiry
+				parts := strings.Split(accessCookie.Value, ".")
+				if len(parts) == 3 {
+					// Decode payload (base64)
+					payload := parts[1]
+					// Add padding
+					for len(payload)%4 != 0 {
+						payload += "="
+					}
+					decoded := make([]byte, len(payload))
+					n, err := base64Decode(decoded, []byte(payload))
+					if err == nil {
+						var claims map[string]interface{}
+						if json.Unmarshal(decoded[:n], &claims) == nil {
+							if exp, ok := claims["exp"].(float64); ok {
+								if time.Now().Unix() >= int64(exp)-30 { // 30s buffer
+									needsRefresh = true
+								}
+							}
+						}
+					}
+				}
+			}
+
+			if needsRefresh && refreshErr == nil && refreshCookie.Value != "" {
+				data, status := omnikitRequest("POST", "/auth/refresh", map[string]string{
+					"refresh_token": refreshCookie.Value,
+				}, nil)
+
+				if status == 200 {
+					var resp map[string]interface{}
+					if json.Unmarshal(data, &resp) == nil {
+						if token, ok := resp["access_token"].(string); ok {
+							http.SetCookie(w, &http.Cookie{
+								Name: "access_token", Value: token, Path: "/",
+								HttpOnly: true, MaxAge: 900,
+							})
+							// Update the request so downstream handlers see the new token
+							r.AddCookie(&http.Cookie{Name: "access_token", Value: token})
+						}
+						if token, ok := resp["refresh_token"].(string); ok {
+							http.SetCookie(w, &http.Cookie{
+								Name: "refresh_token", Value: token, Path: "/",
+								HttpOnly: true, MaxAge: 86400 * 7,
+							})
+						}
+					}
+				} else {
+					// Refresh failed — clear cookies and redirect to login
+					http.SetCookie(w, &http.Cookie{Name: "access_token", Value: "", Path: "/", MaxAge: -1})
+					http.SetCookie(w, &http.Cookie{Name: "refresh_token", Value: "", Path: "/", MaxAge: -1})
+				}
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	})
+
+	// Auth guard — redirect to /login if no session cookie
+	app.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			path := r.URL.Path
+			// Public paths that don't need auth
+			if path == "/login" || path == "/" ||
+				strings.HasPrefix(path, "/api/") ||
+				strings.HasPrefix(path, "/action/") ||
+				strings.HasPrefix(path, "/static/") ||
+				strings.HasPrefix(path, "/runtime/") ||
+				strings.HasPrefix(path, "/app/") ||
+				strings.HasPrefix(path, "/__") ||
+				strings.HasPrefix(path, "/_data/") {
+				next.ServeHTTP(w, r)
+				return
+			}
+			// Check for auth cookie
+			if _, err := r.Cookie("access_token"); err != nil {
+				http.Redirect(w, r, "/login", 302)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
 
 	// ── Auth Proxy ────────────────────────────────────────────
 
@@ -120,6 +231,16 @@ func main() {
 	app.API("/api/auth/me", func(w http.ResponseWriter, r *http.Request) {
 		data, status := omnikitRequest("GET", "/auth/me", nil, r)
 		w.Header().Set("Content-Type", "application/json")
+		if status == 200 {
+			// Unwrap: OmniKit returns {user:{...}, ...} — extract the user object
+			var resp map[string]json.RawMessage
+			if json.Unmarshal(data, &resp) == nil {
+				if userData, ok := resp["user"]; ok {
+					w.Write(userData)
+					return
+				}
+			}
+		}
 		w.WriteHeader(status)
 		w.Write(data)
 	})
@@ -176,7 +297,7 @@ func main() {
 
 	app.API("/api/storage/files", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
-			data, status := omnikitRequest("GET", "/storage/files?project_id="+projectID, nil, r)
+			data, status := omnikitRequest("GET", "/storage/files?project_id="+getProjectID(r), nil, r)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(status)
 			w.Write(data)
@@ -200,10 +321,54 @@ func main() {
 		w.Write(data)
 	})
 
-	app.API("/api/tables", func(w http.ResponseWriter, r *http.Request) {
-		data, status := omnikitRequest("GET", "/tables?project_id="+projectID, nil, r)
+	app.API("/api/projects", func(w http.ResponseWriter, r *http.Request) {
+		data, _ := omnikitRequest("GET", "/auth/me", nil, r)
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
+		var resp map[string]json.RawMessage
+		if json.Unmarshal(data, &resp) == nil {
+			pid := getProjectID(r)
+			projects := resp["projects"]
+			if projects == nil {
+				projects = []byte("[]")
+			}
+			fmt.Fprintf(w, `{"projects":%s,"current_project_id":"%s"}`, string(projects), pid)
+			return
+		}
+		w.Write([]byte(`{"projects":[]}`))
+	})
+
+	app.API("/api/tables", func(w http.ResponseWriter, r *http.Request) {
+		data, _ := omnikitRequest("GET", "/tables?project_id="+getProjectID(r), nil, r)
+		w.Header().Set("Content-Type", "application/json")
+
+		// Extract just name + table_type, filter to data tables only
+		var raw map[string]json.RawMessage
+		if json.Unmarshal(data, &raw) == nil {
+			if tableData, ok := raw["data"]; ok {
+				var tables []map[string]interface{}
+				if json.Unmarshal(tableData, &tables) == nil {
+					var filtered []map[string]string
+					for _, t := range tables {
+						tt, _ := t["table_type"].(string)
+						if tt == "system" {
+							continue
+						}
+						name, _ := t["name"].(string)
+						displayName, _ := t["display_name"].(string)
+						if name == "" {
+							continue
+						}
+						filtered = append(filtered, map[string]string{
+							"name":         name,
+							"display_name": displayName,
+							"table_type":   tt,
+						})
+					}
+					json.NewEncoder(w).Encode(map[string]interface{}{"data": filtered})
+					return
+				}
+			}
+		}
 		w.Write(data)
 	})
 
@@ -213,9 +378,11 @@ func main() {
 		email := r.FormValue("email")
 		password := r.FormValue("password")
 
+		log.Printf("[Login] email=%s project_id=%s", email, projectID)
 		data, status := omnikitRequest("POST", "/auth/login", map[string]string{
-			"email": email, "password": password,
+			"email": email, "password": password, "project_id": projectID,
 		}, nil)
+		log.Printf("[Login] status=%d response=%s", status, string(data)[:min(len(data), 100)])
 
 		if status != 200 {
 			return lungo.ActionResult{Error: "Invalid email or password"}
@@ -237,6 +404,53 @@ func main() {
 			})
 		}
 
+		// Store projects list as a readable cookie for the project selector
+		// Fetch full /auth/me to get projects
+		meData, meStatus := omnikitRequest("GET", "/auth/me", nil, &http.Request{
+			Header: http.Header{"Cookie": []string{"access_token=" + resp["access_token"].(string)}},
+		})
+		if meStatus == 200 {
+			var meResp map[string]interface{}
+			if json.Unmarshal(meData, &meResp) == nil {
+				if projects, ok := meResp["projects"].([]interface{}); ok {
+					var slim []map[string]interface{}
+					for _, p := range projects {
+						if pm, ok := p.(map[string]interface{}); ok {
+							slim = append(slim, map[string]interface{}{
+								"id":   pm["id"],
+								"name": pm["name"],
+							})
+						}
+					}
+					pJSON, _ := json.Marshal(slim)
+					http.SetCookie(w, &http.Cookie{
+						Name: "omnikit_projects", Value: string(pJSON), Path: "/",
+						MaxAge: 86400 * 7,
+					})
+				}
+			}
+		}
+
+		// Set default project cookie if not set
+		if _, err := (&http.Request{Header: r.Header}).Cookie("omnikit_project"); err != nil {
+			http.SetCookie(w, &http.Cookie{
+				Name: "omnikit_project", Value: projectID, Path: "/",
+				MaxAge: 86400 * 365,
+			})
+		}
+
+		return lungo.ActionResult{Redirect: "/dashboard"}
+	})
+
+	app.Action("switch-project", func(w http.ResponseWriter, r *http.Request) lungo.ActionResult {
+		pid := r.FormValue("project_id")
+		if pid == "" {
+			return lungo.ActionResult{Error: "Project ID required"}
+		}
+		http.SetCookie(w, &http.Cookie{
+			Name: "omnikit_project", Value: pid, Path: "/",
+			HttpOnly: false, MaxAge: 86400 * 365,
+		})
 		return lungo.ActionResult{Redirect: "/dashboard"}
 	})
 
@@ -281,21 +495,68 @@ func main() {
 	// ── Loader endpoints (server-side data for pages) ─────────
 
 	app.API("/api/loader/dashboard", func(w http.ResponseWriter, r *http.Request) {
-		// Fetch user + recent data in parallel
-		userCh := make(chan []byte)
+		pid := getProjectID(r)
+		// Fetch user + tables in parallel
+		type meResult struct {
+			user     []byte
+			projects []byte
+		}
+		meCh := make(chan meResult)
 		go func() {
 			data, _ := omnikitRequest("GET", "/auth/me", nil, r)
-			userCh <- data
+			var resp map[string]json.RawMessage
+			var res meResult
+			if json.Unmarshal(data, &resp) == nil {
+				if u, ok := resp["user"]; ok {
+					res.user = u
+				}
+				if p, ok := resp["projects"]; ok {
+					res.projects = p
+				}
+			}
+			if res.user == nil {
+				res.user = data
+			}
+			meCh <- res
 		}()
 
-		// Get tables list
-		tablesData, _ := omnikitRequest("GET", "/tables?project_id="+projectID, nil, r)
+		tablesRaw, _ := omnikitRequest("GET", "/tables?project_id="+getProjectID(r), nil, r)
+		// Filter to data tables, slim payload
+		var tablesData []byte
+		var rawT map[string]json.RawMessage
+		if json.Unmarshal(tablesRaw, &rawT) == nil {
+			if td, ok := rawT["data"]; ok {
+				var allTables []map[string]interface{}
+				if json.Unmarshal(td, &allTables) == nil {
+					var filtered []map[string]string
+					for _, t := range allTables {
+						tt, _ := t["table_type"].(string)
+						if tt == "system" {
+							continue
+						}
+						name, _ := t["name"].(string)
+						dn, _ := t["display_name"].(string)
+						if name != "" {
+							filtered = append(filtered, map[string]string{"name": name, "display_name": dn})
+						}
+					}
+					tablesData, _ = json.Marshal(filtered)
+				}
+			}
+		}
+		if tablesData == nil {
+			tablesData = tablesRaw
+		}
 
-		userData := <-userCh
+		meData := <-meCh
 
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"user":%s,"tables":%s,"project_id":%s,"timestamp":"%s"}`,
-			string(userData), string(tablesData), projectID,
+		projects := meData.projects
+		if projects == nil {
+			projects = []byte("[]")
+		}
+		fmt.Fprintf(w, `{"user":%s,"tables":%s,"projects":%s,"project_id":"%s","timestamp":"%s"}`,
+			string(meData.user), string(tablesData), string(projects), pid,
 			time.Now().Format(time.RFC3339))
 	})
 

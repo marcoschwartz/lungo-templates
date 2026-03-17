@@ -22,8 +22,11 @@ function StatCard({ label, value, icon }) {
 
 export default function DashboardPage({ data }) {
   const user = data ? data.user : null;
-  const tables = data ? data.tables : [];
-  const tableCount = Array.isArray(tables) ? tables.length : 0;
+  const rawTables = data ? data.tables : [];
+  const tables = Array.isArray(rawTables) ? rawTables : (rawTables && rawTables.data ? rawTables.data : []);
+  const tableCount = tables.length;
+  const projects = data && data.projects ? data.projects : [];
+  const currentPid = data ? data.project_id : "";
 
   return (
     <div>

@@ -16,7 +16,7 @@ export default function LoginPage() {
           <p class="text-stone-500 text-sm">Sign in to your account</p>
         </div>
 
-        <form method="POST" action="/__action/login" class="space-y-4">
+        <form method="POST" action="/action/login" class="space-y-4">
           {error ? (
             <div class="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
               {error}
