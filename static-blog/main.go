@@ -46,18 +46,9 @@ func omnikitPost(path string, body interface{}) ([]byte, int) {
 }
 
 func main() {
-	apiURL = os.Getenv("OMNIKIT_API_URL")
-	if apiURL == "" {
-		apiURL = "http://localhost:3000/omnikit"
-	}
-	apiKey = os.Getenv("OMNIKIT_API_KEY")
-	projectID = os.Getenv("OMNIKIT_PROJECT_ID")
-	if projectID == "" {
-		projectID = "1"
-	}
-
 	dev := os.Getenv("LUNGO_DEV") == "1"
 
+	// lungo.New() loads .env files — must be called before os.Getenv
 	app := lungo.New(lungo.Options{
 		AppDir:       "./app",
 		StaticDir:    "./static",
@@ -73,6 +64,17 @@ func main() {
 			RevalidateSecret: os.Getenv("REVALIDATE_SECRET"),
 		},
 	})
+
+	// Read env after lungo.New() which loads .env files
+	apiURL = os.Getenv("OMNIKIT_API_URL")
+	if apiURL == "" {
+		apiURL = "https://api.omnikit.co"
+	}
+	apiKey = os.Getenv("OMNIKIT_API_KEY")
+	projectID = os.Getenv("OMNIKIT_PROJECT_ID")
+	if projectID == "" {
+		projectID = "1"
+	}
 
 	app.Use(lungo.CORS(lungo.CORSOptions{AllowOrigins: []string{"*"}}))
 
