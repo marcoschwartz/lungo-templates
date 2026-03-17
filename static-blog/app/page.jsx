@@ -8,7 +8,7 @@ export const metadata = {
 function FeatureCard({ icon, title, description }) {
   return (
     <div class="rounded-xl border border-amber-800/20 bg-amber-900/10 p-6 hover:bg-amber-900/20 transition-all">
-      <div class="text-2xl mb-3">{icon}</div>
+      <div class="mb-4">{icon}</div>
       <h3 class="text-lg font-semibold text-stone-100 mb-2">{title}</h3>
       <p class="text-sm text-stone-400 leading-relaxed">{description}</p>
     </div>
@@ -67,19 +67,19 @@ export default function HomePage() {
       <section class="max-w-5xl mx-auto px-4 md:px-6 pb-20">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
           <FeatureCard
-            icon="&#9889;"
+            icon={<svg width="24" height="24" class="text-amber-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/></svg>}
             title="Static + ISR"
-            description="Pages cached as pure HTML. Blog posts revalidate every 60 seconds via OmniKit CMS."
+            description="Pages cached as pure HTML. Blog posts revalidate every 60 seconds from the API."
           />
           <FeatureCard
-            icon="&#9997;"
+            icon={<svg width="24" height="24" class="text-amber-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>}
             title="CMS Managed"
-            description="Create and edit blog posts in OmniKit. No code changes needed — content updates automatically."
+            description="Create and edit blog posts via API. No code changes — content updates automatically."
           />
           <FeatureCard
-            icon="&#9993;"
+            icon={<svg width="24" height="24" class="text-amber-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>}
             title="Lead Capture"
-            description="Email signups go straight to OmniKit Messaging. Build your audience with zero infrastructure."
+            description="Email signups captured via API. Build your audience with zero infrastructure."
           />
         </div>
       </section>

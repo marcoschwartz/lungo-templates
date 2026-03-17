@@ -18,7 +18,7 @@ function PostCard({ post }) {
   const readTime = data.read_time || "";
 
   return (
-    <a href={"/blog/" + slug} class="block rounded-xl border border-amber-800/20 bg-amber-900/10 p-6 hover:bg-amber-900/20 hover:border-amber-700/30 transition-all no-underline group">
+    <a href={"/" + slug} class="block rounded-xl border border-amber-800/20 bg-amber-900/10 p-6 hover:bg-amber-900/20 hover:border-amber-700/30 transition-all no-underline group">
       {category ? (
         <span class="text-xs font-medium text-amber-400 uppercase tracking-wider">{category}</span>
       ) : null}
