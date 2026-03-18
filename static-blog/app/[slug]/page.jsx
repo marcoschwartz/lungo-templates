@@ -63,7 +63,7 @@ export default function PostPage({ data, params }) {
 
       {quickStats.length > 0 ? (
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-10">
-          {quickStats.map(s => <QuickStat icon={s.icon} label={s.label} value={s.value}></div>)}
+          {quickStats.map(s => <QuickStat icon={s.icon} label={s.label} value={s.value} />)}
         </div>
       ) : null}
 
