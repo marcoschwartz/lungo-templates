@@ -57,7 +57,7 @@ export default function PostPage({ data, params }) {
 
       {heroImage ? (
         <div class="rounded-xl overflow-hidden mb-10 border border-amber-800/20">
-          <img src={heroImage} alt={title} class="w-full" />
+          <Image src={heroImage} alt={title} class="w-full" priority={true} />
         </div>
       ) : null}
 
