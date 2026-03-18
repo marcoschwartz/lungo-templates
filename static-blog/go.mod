@@ -2,7 +2,7 @@ module myapp
 
 go 1.25.1
 
-require github.com/marcoschwartz/lungo v0.7.4
+require github.com/marcoschwartz/lungo v0.7.5
 
 require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect

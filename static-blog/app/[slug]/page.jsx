@@ -1,4 +1,4 @@
-const { h } = window.Lungo;
+const { h, Image } = window.Lungo;
 
 export const loader = { url: "/api/blog/post" };
 
