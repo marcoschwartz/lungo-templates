@@ -5,3 +5,4 @@ bin
 tasks.json
 .env
 .env.local
+myapp
